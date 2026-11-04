@@ -1,0 +1,112 @@
+[
+  {
+    "name": "agent-base",
+    "version": "7.1.4",
+    "license": "MIT"
+  },
+  {
+    "name": "debug",
+    "version": "4.4.3",
+    "license": "MIT"
+  },
+  {
+    "name": "duplexify",
+    "version": "4.1.3",
+    "license": "MIT"
+  },
+  {
+    "name": "readable-stream",
+    "version": "3.6.2",
+    "license": "MIT"
+  },
+  {
+    "name": "end-of-stream",
+    "version": "1.4.5",
+    "license": "MIT"
+  },
+  {
+    "name": "has-flag",
+    "version": "4.0.0",
+    "license": "MIT"
+  },
+  {
+    "name": "http-proxy-agent",
+    "version": "7.0.2",
+    "license": "MIT"
+  },
+  {
+    "name": "https-proxy-agent",
+    "version": "7.0.6",
+    "license": "MIT"
+  },
+  {
+    "name": "inherits",
+    "version": "2.0.4",
+    "license": "ISC"
+  },
+  {
+    "name": "megajs",
+    "version": "1.3.10",
+    "license": "MIT"
+  },
+  {
+    "name": "ms",
+    "version": "2.1.3",
+    "license": "MIT"
+  },
+  {
+    "name": "once",
+    "version": "1.4.0",
+    "license": "ISC"
+  },
+  {
+    "name": "pump",
+    "version": "3.0.4",
+    "license": "MIT"
+  },
+  {
+    "name": "pumpify",
+    "version": "2.0.1",
+    "license": "MIT"
+  },
+  {
+    "name": "safe-buffer",
+    "version": "5.1.2",
+    "license": "MIT"
+  },
+  {
+    "name": "stream-shift",
+    "version": "1.0.3",
+    "license": "MIT"
+  },
+  {
+    "name": "stream-skip",
+    "version": "1.0.3",
+    "license": "MIT"
+  },
+  {
+    "name": "string_decoder",
+    "version": "1.1.1",
+    "license": "MIT"
+  },
+  {
+    "name": "supports-color",
+    "version": "7.2.0",
+    "license": "MIT"
+  },
+  {
+    "name": "undici",
+    "version": "7.28.0",
+    "license": "MIT"
+  },
+  {
+    "name": "util-deprecate",
+    "version": "1.0.2",
+    "license": "MIT"
+  },
+  {
+    "name": "wrappy",
+    "version": "1.0.2",
+    "license": "ISC"
+  }
+]

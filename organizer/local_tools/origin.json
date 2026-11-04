@@ -1,0 +1,19 @@
+{
+  "smart_match.py": "2001f9c9ab91455b50924b74f90389b8fd3c7272fab8088953d287799338f9a8",
+  "name_match.py": "b3cee13fdaf58eff2eaf9699d09fa45cecd34a18e127e684a71f726db100811e",
+  "script_intensity.py": "f17810e9116133adc7fcc21906ab7346402a3499cd471c3937ca2b2b6b3e585f",
+  "motion_compare.py": "da7a2b48f5232951d1e8aa0b7b1e2f3927324f58e2ff35d1975301c06e7f0aa5",
+  "heatmap_review.py": "bda4606017fbae037f74ddf5e5ce40ed8fed71d59b2651e46d40f15cc9f1bcf9",
+  "playback_review.py": "d83492923187a651a73637b16c44631e5f559b918e0cbf5deb3ec19127a54af6",
+  "ui_theme.py": "08fd29ee0b5e7a52715ca284a93c7db27d659b767ab37cd8380e64e551df020d",
+  "funscript_duplicates\\core.py": "eb6a3065c73a3aa442a7da27567fd3995c1d38fb7fd012231b2cf924abd1115d",
+  "funscript_duplicates\\organize.py": "746a2021ebd667d5563dec3e1caa986259a499a47285eedffed57853528eabfc",
+  "funscript_duplicates\\organize_ui.py": "3225c28bf65f5fa505980833d593fbb40ade1a38469c86c845d2a7308199746f",
+  "funscript_duplicates\\report_io.py": "cb2630e338d348ac0661a3ac3cff911fc814519a40af580a0913aa21a5e8e3c1",
+  "funscript_duplicates\\ui.py": "96568e2d148d0bd175b6c305259ab4b029aad2fe894afdaaafa4c65123e1397b",
+  "funscript_duplicates\\__init__.py": "ef7c590ea58c442c312182b794a43a7b8b8c2f0bab4054e9592e31c781ae5021",
+  "video_duplicates\\backend.py": "27d8e3b477aaa40fce76aa418a03736cec1337b8256566bf426406871c5e29bd",
+  "video_duplicates\\core.py": "d1e901ecb62e712882a576efda3a4ee9df033d2058028a1e2edc84e1ada31fd2",
+  "video_duplicates\\ui.py": "997b1435a11ed23c1586c22d3251cff3a6373d4eb6a9bcc4b8aa764517a9c7d6",
+  "video_duplicates\\__init__.py": "f375055afe6287b9f0ad0334a2d048e29e7d1e0abcb4315e891c70fec7778e47"
+}
