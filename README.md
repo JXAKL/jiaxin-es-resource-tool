@@ -2,6 +2,17 @@
 
 当前版本：**2.1.24**。面向 Windows 的资源整理桌面工具，使用 Python、Tk / CustomTkinter 和 Playwright。
 
+## 下载使用
+
+无需配置 Python。打开 **[版本下载页](https://github.com/JXAKL/jiaxin-es-resource-tool/releases/latest)**，在 Assets 中选择：
+
+- `Jiaxin-ES-Resource-Tool-2.1.24-Setup.exe`：中文安装向导，可创建桌面快捷方式。
+- `Jiaxin-ES-Resource-Tool-2.1.24-Portable.zip`：完整解压后运行文件夹内的 `夹心的ES资源工具.exe`。
+
+适用于 Windows 10/11 64 位。两种发行包均附带 Python、浏览器和播放组件，不含原用户配置、登录会话或素材数据库。首次使用需设置自己的素材目录，并按需要登录网站。不要下载 GitHub 自动生成的 Source code 来代替可运行发行包。
+
+安装器安装到当前用户目录，卸载保留个人数据。安装版和免安装版均沿用 `%LOCALAPPDATA%\EroScriptsOrganizer` 保存设置。当前发行 EXE 未做代码签名。
+
 ## 功能
 
 - 作者归类：根据 ES 帖子标题、正文和附件证据匹配作者，预览后归类。
