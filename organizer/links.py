@@ -2,7 +2,7 @@
 import html
 import re
 from urllib.parse import urlsplit, urlunsplit
-from .downloads.model import normalize_url as downloadable_url, PLATFORMS, KEYS
+from .downloads.model import normalize_url as downloadable_url, protected_mega_kind, PLATFORMS, KEYS
 
 URL = re.compile(r'https?://[^\s<>"\x27]+', re.I)
 RULES = [('hanime', 'Hanime1'), ('iwara', 'Iwara'), ('rule34', 'Rule34Video'),
@@ -35,6 +35,7 @@ def classify(value):
     if host == 'gofile.io' and re.fullmatch(r'/d/[\w-]+/?', path):
         return 'gofile'
     if host in ('mega.nz', 'mega.co.nz', 'mega.io'):
+        if supported and path in ('','/') and (kind:=protected_mega_kind(url.fragment)):return kind
         if path.startswith('/folder/') or url.fragment.startswith('F!'):
             return 'mega_folder'
         if path.startswith('/file/') or url.fragment.startswith('!'):

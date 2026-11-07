@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {Transform,Readable}=require('node:stream');
 const {pipeline}=require('node:stream/promises');
-const {DownloadError,StateStore,sizeOf,preserve,httpError}=require('./transfer');
+const {DownloadError,StateStore,sizeOf,preserve,httpError,retryAfter}=require('./transfer');
 const {rateLimit}=require('./rate-limit');
 const sdk=()=>require('./vendor/megajs.cjs');
 
@@ -118,9 +118,27 @@ async function transferFile(info,store,source,{signal,connections=2,rate=0,onPro
     onProgress({downloaded:info.size,total:info.size,speed:0});
   } catch(error) {store.update(row,{status:'PENDING',local_size:sizeOf(part),error:signal?.aborted?'已停止':megaError(error).message});throw megaError(error);}
 }
-async function downloadMega(source,options,{signal,pacer,onProgress=()=>{},log=()=>{}}={}) {
+async function downloadMega(source,options,{signal,pacer,onProgress=()=>{},log=()=>{},interact,session={}}={}) {
   const store=new StateStore(options.output,'mega_local_download_state.json');
-  const selection=parseLink(source);
+  const {protectedPayload,unlock}=require('./mega-password');
+  const protectedBytes=protectedPayload(source);
+  const separateKey=/^https:\/\/mega\.nz\/(?:file|folder)\/[\w-]+\/?$/.test(source);
+  let resolved=session.resolved || source, message='';
+  while (!session.resolved && (protectedBytes || separateKey)) {
+    if (!interact)throw new DownloadError('MEGA_INPUT','请在下载模块中单独输入此链接的密码或解密密钥。');
+    const value=await interact({kind:protectedBytes?'password':'key',message});
+    if(typeof value!=='string')throw new DownloadError('MEGA_SKIP','已跳过本次下载。');
+    try {
+      resolved=protectedBytes?await unlock(protectedBytes,value):source+'#'+value.trim().replace(/^#/,'');
+      parseLink(resolved);break;
+    } catch(error) {
+      if(!['MEGA_KEY','MEGA_PASSWORD','MEGA_LINK'].includes(error.code))throw error;
+      message=protectedBytes?error.message:'解密密钥格式不正确，请重新输入。';
+    }
+  }
+  const selection=parseLink(resolved);
+  const cmd = options.megaMode === 'megacmd' ? require('./megacmd') : null;
+  const run = cmd && cmd.commander(cmd.clientPath(options.megacmdPath));
   const network=options.proxy?require('./vendor/network.cjs'):null;
   const dispatcher=network?new network.ProxyAgent(options.proxy):null;
   const timeoutMs=options.transfer?.connectTimeoutMs||60000;
@@ -137,18 +155,48 @@ async function downloadMega(source,options,{signal,pacer,onProgress=()=>{},log=(
     try {response=await (network?.fetch||fetch)(url,{...init,...(dispatcher?{dispatcher}:{}),
       signal:AbortSignal.any([signal,init.signal,streaming?headers.signal:AbortSignal.timeout(timeoutMs)].filter(Boolean))});}
     finally {if(headerTimer)clearTimeout(headerTimer);}
-    if(response.status===509||response.status===429)throw new DownloadError('MEGA_QUOTA','MEGA 限流或流量额度不足，断点已保留，稍后再继续。',{pauseQueue:true});
+    if(response.status===509||response.status===429) {
+      const quota=response.status===509;
+      const wait=Math.max(retryAfter(response.headers.get('retry-after'))||0,
+        quota ? retryAfter(response.headers.get('x-mega-time-left'))||0 : 0);
+      await response.body?.cancel();
+      throw new DownloadError(quota?'MEGA_QUOTA':'MEGA_RATE',quota?'MEGA 流量额度不足':'MEGA 请求过于频繁',
+        {pauseQueue:true,retryAfterMs:wait});
+    }
     if(!response.ok)throw httpError(response.status,Object.fromEntries(response.headers));
     return streaming?streamingResponse(response):response;
   }});
   try {
     const node=sdk().File.fromURL(selection.base,{api});await node.loadAttributes();signal?.throwIfAborted();
-    const files=flatten(node,selection);
+    let files=flatten(node,selection);
+    if(protectedBytes || separateKey)session.resolved=resolved;
+    const saved=store.data.tasks[source]?.picked_ids;
+    if (session.ids || protectedBytes || separateKey || saved || (interact && options.megaPick && node.directory)) {
+      let ids=session.ids;
+      if (!ids && interact) ids=await interact({kind:'files',files:files.map(({id,name,dirs,size})=>({id,name,dirs,size})),selected:saved||[]});
+      if (!ids && !interact)ids=saved;
+      if (!Array.isArray(ids)||!ids.length)throw new DownloadError('MEGA_SKIP','已跳过本次下载。');
+      const wanted=new Set(ids);
+      files=files.filter(f=>wanted.has(f.id));
+      if(new Set(files.map(f=>f.id)).size!==wanted.size)throw new DownloadError('MEGA_CHANGED','所选文件已变动，请重新打开清单核对。');
+      session.ids=ids;
+      store.task(source,{picked_ids:ids});
+    }
     store.task(source,{platform:'mega',status:'DOWNLOADING',file_ids:files.map(x=>x.id)});
     for(let i=0;i<files.length;i++) {
       signal?.throwIfAborted();
-      await transferFile(files[i],store,source,{signal,connections:options.megaConnections||2,
-        rate:options.rateLimit||0,log,onProgress:p=>onProgress({...p,filename:files[i].name,fileIndex:i+1,fileCount:files.length})});
+      const file = files[i];
+      const progress = p => onProgress({...p,filename:file.name,fileIndex:i+1,fileCount:files.length});
+      if (options.megaMode === 'revival') {
+        await require('./revival').transferRevival(file,store,source,options,{signal,onProgress:progress});
+      } else if (cmd) {
+        const url = node.directory ? selection.base+'/file/'+nodeId(file.node) : selection.base;
+        await cmd.transferCmd(file,store,source,{signal,run,url,onProgress:progress,log,
+          beforeSubmit:()=>pacer?.wait(signal)});
+      } else {
+        await transferFile(file,store,source,{signal,connections:options.megaConnections||2,
+          rate:options.rateLimit||0,log,onProgress:progress});
+      }
     }
     store.task(source,{status:'COMPLETED',error:null});return files.length;
   } catch(error){store.task(source,{status:'PENDING',error:signal?.aborted?'已停止':megaError(error).message});throw megaError(error);}

@@ -96,6 +96,8 @@ def address_kind(url, label=''):
                 if kind:=file_kind(value.strip('"\'')):return kind
     # Explicit share objects, never a provider's homepage/login/account page.
     if host in {'mega.nz','mega.co.nz','mega.io'}:
+        from .downloads.model import protected_mega_kind
+        if p in {'','/'} and protected_mega_kind(u.fragment):return 'storage'
         if re.fullmatch(r'/(?:file|folder)/[^/]+(?:/(?:file|folder)/[^/]+)?/?',path) or (p in {'','/'} and re.match(r'^(?:F)?![^!]+',u.fragment)):
             return 'storage'
     if host=='gofile.io' and re.fullmatch(r'/d/[\w-]+/?',path):return 'storage'

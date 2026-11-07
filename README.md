@@ -1,10 +1,10 @@
 # 夹心的ES资源工具
 
-当前版本：**2.1.24**。面向 Windows 的资源整理桌面工具，使用 Python、Tk / CustomTkinter 和 Playwright。
+当前源码版本为 **2.1.27**。这是面向 Windows 的资源整理桌面工具，使用 Python、Tk / CustomTkinter 和 Playwright。此版本支持 MEGA 密码分享、单独输入解密密钥以及按文件和子文件夹勾选下载。
 
 ## 下载使用
 
-无需配置 Python。打开 **[版本下载页](https://github.com/JXAKL/jiaxin-es-resource-tool/releases/latest)**，在 Assets 中选择：
+已有 Windows 可运行包的版本为 **2.1.24**。打开 [2.1.24 下载页](https://github.com/JXAKL/jiaxin-es-resource-tool/releases/tag/v2.1.24)，在 Assets 中选择：
 
 - `Jiaxin-ES-Resource-Tool-2.1.24-Setup.exe`：中文安装向导，可创建桌面快捷方式。
 - `Jiaxin-ES-Resource-Tool-2.1.24-Portable.zip`：完整解压后运行文件夹内的 `夹心的ES资源工具.exe`。
@@ -30,6 +30,15 @@
 建议使用带 Tk 的 Windows x64 Python 3.14。安装 requirements.txt 后，以 pythonw launch.pyw 启动。联网功能需要 Playwright 浏览器运行库；播放核对需要 mpv。构建和便携自检入口分别为 build_release.py、verify_release.py。
 
 本仓库是源码，不包含预装的 Python、Chromium、Node 或 mpv 可执行文件。便携构建需预先准备 .build-assets 中的对应运行库及第三方许可；下载模块的已打包 JavaScript 网络库和许可位于 organizer/downloads/js/vendor。
+
+从源码使用 Revival 下载时，请先将上游发行的单文件 `MegaDownloader.exe` 放入 `organizer/downloads/js/vendor/revival/`，并在仓库根目录运行下面的 PowerShell 命令校验和编译下载组件。Windows 需安装 .NET Framework 4.8。完整构建脚本也会执行这两步。[MegaDownloader Revival v2.6.2](https://github.com/a1175815821/MegaDownloader-Revival/releases/tag/v2.6.2)
+
+```powershell
+$revival = (Resolve-Path organizer/downloads/js/vendor/revival).Path
+$engine = Join-Path $revival MegaDownloader.exe
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $engine).Hash -ne '6AFC3DFD23766F9B3227549111AF524E2E2485D5C11E416BB31BB1B297EAEB50') { throw 'Revival 文件校验失败' }
+& "$env:SystemRoot\Microsoft.NET\Framework\v4.0.30319\csc.exe" /nologo /platform:x86 /optimize+ "/out:$revival\RevivalWorker.exe" "/reference:$engine" /reference:System.Web.Extensions.dll /reference:System.Windows.Forms.dll .\organizer\downloads\revival\RevivalWorker.cs
+```
 
 ## 项目结构
 

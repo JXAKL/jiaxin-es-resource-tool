@@ -3,12 +3,21 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 import hashlib
+import base64
 import json
 import re
 
 PLATFORMS = {'hanime1.me': 'Hanime1', 'iwara.tv': 'Iwara', 'rule34video.com': 'Rule34Video',
              'mega.nz': 'MEGA', 'pixeldrain.com': 'Pixeldrain', 'gofile.io': 'GoFile'}
 KEYS = {'Hanime1': 'hanime', 'Iwara': 'iwara', 'Rule34Video': 'rule34', 'MEGA': 'mega', 'Pixeldrain': 'pixeldrain', 'GoFile': 'gofile'}
+
+def protected_mega_kind(fragment):
+    if not re.fullmatch(r'P![A-Za-z0-9_-]{118}|P![A-Za-z0-9_-]{139}',fragment): return None
+    data=base64.urlsafe_b64decode(fragment[2:]+'==')
+    if data[0] in (0,1,2):
+        if data[1]==0 and len(data)==88:return 'mega_folder'
+        if data[1]==1 and len(data)==104:return 'mega_file'
+    return None
 
 def normalize_url(value):
     try:
@@ -20,7 +29,7 @@ def normalize_url(value):
         patterns = {'hanime1.me': r'^/(?:watch|download)(?:/|$)', 'iwara.tv': r'^/video/[^/]+',
                     'rule34video.com': r'^/(?:video|videos)/[^/]+', 'gofile.io': r'^/d/[\w-]+/?$',
                     'pixeldrain.com': r'^/(?:u|l)/[\w-]+/?$', 'mega.nz': r'^/(?:file|folder)/[^/]+'}
-        if host == 'mega.nz' and u.path in ('', '/') and re.match(r'^(?:F)?!', u.fragment):
+        if host == 'mega.nz' and u.path in ('', '/') and (re.match(r'^(?:F)?!', u.fragment) or protected_mega_kind(u.fragment)):
             pass
         elif not re.match(patterns[host], u.path):
             return None

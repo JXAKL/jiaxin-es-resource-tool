@@ -1,5 +1,6 @@
 # Runtime state and private sessions
 .state/
+/organizer/downloads/js/vendor/revival/*.exe
 reports/
 *.sqlite3
 *.sqlite3-*

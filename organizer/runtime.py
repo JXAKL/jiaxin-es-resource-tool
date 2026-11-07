@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = '夹心的ES资源工具'
-APP_VERSION = '2.1.24'
+APP_VERSION = '2.1.27'
 FROZEN = bool(getattr(sys, 'frozen', False))
 ROOT = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parents[1]
 BUNDLE = Path(getattr(sys, '_MEIPASS', ROOT))

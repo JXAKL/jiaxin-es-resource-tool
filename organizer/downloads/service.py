@@ -90,13 +90,15 @@ class DownloadService:
                     lines.put(None)
             threading.Thread(target=read, daemon=True).start()
             stopping_at = None
+            official_transfer = False
+            mega_urls = {item.url for item in items if item.platform == 'MEGA'}
             while True:
                 if self.cancel.is_set():
                     if stopping_at is None:
                         self.send('STOP'); stopping_at = time.monotonic()
-                    elif time.monotonic() - stopping_at > 8 and self.process.poll() is None:
+                    elif time.monotonic() - stopping_at > (65 if official_transfer else 8) and self.process.poll() is None:
                         # Only terminate this known child tree if graceful cancellation did not finish.
-                        if os.name == 'nt':
+                        if os.name == 'nt' and not official_transfer:
                             subprocess.run(['taskkill', '/PID', str(self.process.pid), '/T', '/F'],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), timeout=10)
@@ -112,7 +114,10 @@ class DownloadService:
                     break
                 if line.startswith('RESOURCE_EVENT '):
                     try:
-                        self.emit(json.loads(line[len('RESOURCE_EVENT '):]))
+                        event = json.loads(line[len('RESOURCE_EVENT '):])
+                        if event.get('type') == 'task' and event.get('status') == '处理中':
+                            official_transfer = options.get('megaMode') == 'megacmd' and event.get('url') in mega_urls
+                        self.emit(event)
                     except ValueError:
                         self.emit({'type': 'log', 'text': '忽略一条格式不完整的进度消息。'})
                 elif line.strip():

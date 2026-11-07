@@ -53,6 +53,28 @@ class DownloadQueueUITests(unittest.TestCase):
         self.assertEqual(preserved.read_text(), 'keep transfer history')
         self.assertEqual(page.add_urls(self.rows[0].url), 1)
 
+    def test_protected_share_picker_selects_only_checked_ids(self):
+        from organizer.downloads.mega_picker import MegaPrompt
+        from organizer.links import classify
+        from organizer.resource_urls import address_kind
+        from organizer.downloads.model import parse_items
+        url='https://mega.nz/#P!AgBoYW5kbGUAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eH0V1DRb_sOEfmDO4wdanR93_5Ev5hnPl-FIYXuPKpnn6eHSujv3hc0KHsCnp8SWTnA'
+        self.assertEqual(parse_items(url)[0].url,url)
+        self.assertEqual(classify(url),'mega_folder')
+        self.assertEqual(address_kind(url),'storage')
+        files=[dict(id='a',name='a.mp4',dirs=['Root'],size=100),
+               dict(id='b',name='clip.pitch.funscript',dirs=['Root','Scripts'],size=5),
+               dict(id='c',name='clip.roll.funscript',dirs=['Root','Scripts'],size=5)]
+        result=[]
+        dialog=MegaPrompt(self.root,dict(kind='files',url=url,files=files,selected=['c']),'Test',result.append)
+        self.assertEqual(dialog.selected,{'c'})
+        dialog.toggle(dialog.paths['Root','Scripts'])
+        self.assertEqual(dialog.selected,{'b','c'})
+        dialog.set_all(False)
+        self.assertEqual(dialog.confirm.cget('state'),'disabled')
+        dialog.toggle('b');dialog.confirm.invoke()
+        self.assertEqual(result,[['b']])
+
     def test_clear_completed_busy_and_failed_save_preserve_queue(self):
         page = self.page
         page.clear_completed()
@@ -122,6 +144,8 @@ class DownloadQueueUITests(unittest.TestCase):
     def test_run_selected_only_and_cloud_local_history_separation(self):
         from organizer.downloads.ui import MEGA_MODES
         page=self.page
+        self.assertEqual(page.options()['megaMode'],'revival')
+        self.assertEqual(page.mega_panels['revival'].winfo_manager(),'pack')
         page.tree.selection_set(self.rows[1].key)
         with patch.object(page,'run') as run:
             page.selected_button.invoke();self.assertEqual([x.key for x in run.call_args.args[0]],[self.rows[1].key])
@@ -130,6 +154,15 @@ class DownloadQueueUITests(unittest.TestCase):
         page.mega_mode.set(MEGA_MODES['cloud']);page.mega.set(True)
         with patch.object(page,'run') as run:page.selected_button.invoke();run.assert_not_called()
         page.mega_mode.set(MEGA_MODES['local'])
+        with patch.object(page,'run') as run:page.selected_button.invoke();self.assertEqual(run.call_args.args[0][0].platform,'MEGA')
+        page.mega_mode.set(MEGA_MODES['megacmd'])
+        page.mega.set(False)
+        page.megacmd_path.set(str(self.folder))
+        self.assertEqual(page.mega_panels['megacmd'].winfo_manager(),'pack')
+        self.assertFalse(page.mega_panels['cloud'].winfo_manager())
+        self.assertEqual(page.options()['megacmdPath'],str(self.folder))
+        page.save()
+        self.assertEqual(load_queue(self.folder/'download-queue.json')[1]['megaMode'],'megacmd')
         with patch.object(page,'run') as run:page.selected_button.invoke();self.assertEqual(run.call_args.args[0][0].platform,'MEGA')
         page.controls(True)
         self.assertEqual(page.selected_button.cget('state'),'disabled')

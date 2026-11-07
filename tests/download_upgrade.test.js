@@ -76,6 +76,44 @@ test('MEGA corrupted partial cannot become completed after range download',async
   await assert.rejects(transferFile(f.info,store,'source'),{code:'MEGA_MAC'});
   assert.equal(fs.existsSync(row.local_path),false);assert.equal(row.status,'PENDING');
 });
+test('MEGAcmd stops only its own transfer, reconnects by directory after restart, and verifies before reuse',async t=>{
+  const {transferCmd}=require('../organizer/downloads/js/megacmd');
+  const f=await fixture(t),store=new StateStore(f.root,'cmd.json'),controller=new AbortController();
+  let stage,state='ACTIVE',submissions=0;
+  const commands=[];
+  const run=async args=>{
+    if(args[0]==='get'){stage=args[3];submissions++;return '';}
+    if(args[1]==='-p'||args[1]==='-r'){
+      commands.push(args.slice(1));assert.equal(args[2],'17');
+      if(args[1]==='-p')state='PAUSED';
+      else {fs.writeFileSync(path.join(stage,f.info.name),f.plain);state='COMPLETED';}
+      return '';
+    }
+    const other='99|'+path.join(f.root,'another-task.tmp')+'|1.00% of 125 B|ACTIVE';
+    return stage ? other+'\n17|'+path.join(stage,f.info.name)+'|30.00% of 96 KB|'+state : other;
+  };
+  const opts={run,url:'https://mega.nz/file/fixture',pollMs:1};
+  await assert.rejects(transferCmd(f.info,store,'source',{...opts,signal:controller.signal,onProgress:()=>controller.abort()}));
+  assert.equal(store.data.files[f.info.id].status,'PENDING');
+  const restored=new StateStore(f.root,'cmd.json');
+  await transferCmd(f.info,restored,'source',opts);
+  assert.deepEqual(commands,[['-p','17'],['-r','17']]);assert.equal(submissions,1);
+  const row=restored.data.files[f.info.id];
+  assert.deepEqual(fs.readFileSync(row.local_path),f.plain);
+  await transferCmd(f.info,restored,'source',opts);assert.equal(row.status,'SKIPPED');assert.equal(submissions,1);
+});
+test('MEGAcmd rejects a same-size corrupt result and keeps existing files',async t=>{
+  const {transferCmd}=require('../organizer/downloads/js/megacmd');
+  const f=await fixture(t),store=new StateStore(f.root,'cmd.json');
+  let dest;
+  const run=async args=>{
+    if(args[0]==='get'){dest=path.join(args[3],f.info.name);fs.writeFileSync(dest,Buffer.alloc(f.plain.length));return '';}
+    return dest?'10|'+dest+'|100%|COMPLETED':'';
+  };
+  await assert.rejects(transferCmd(f.info,store,'source',{run,url:'fixture',pollMs:1}),{code:'MEGACMD_INCOMPLETE'});
+  assert.equal(store.data.files[f.info.id].status,'PENDING');
+  assert.equal(fs.existsSync(store.data.files[f.info.id].local_path),false);
+});
 test('MEGA cancellation during throttle keeps partial and never finalizes',async t=>{
   const f=await fixture(t),store=new StateStore(f.root,'state.json'),control=new AbortController();
   const pending=transferFile(f.info,store,'source',{signal:control.signal,rate:64*1024});

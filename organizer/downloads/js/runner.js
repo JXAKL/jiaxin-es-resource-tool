@@ -16,11 +16,26 @@ class Engine {
   constructor(options, chromium) {
     this.options = options; this.chromium = chromium; this.context = null; this.platform = null;
     this.controller = new AbortController(); this.signal = this.controller.signal;
+    this.promptId=0;
     this.config = { ...DEFAULTS, retryDelays: [3000, 10000, 30000], rateLimit:options.rateLimit||0,proxy:options.proxy||'',...options.transfer };
     this.pacer = new DownloadPacer(path.join(options.state || options.output || '.', 'download-pacing.json'),
       {interval:options.requestInterval ?? 8,perMinute:options.perMinute ?? 6,log});
   }
   async stop() { this.controller.abort(); await this.close(); }
+  askMega(url, prompt) {
+    this.signal.throwIfAborted();
+    const id=++this.promptId;
+    return new Promise((resolve,reject)=>{
+      const abort=()=>{this.answerMega=null;reject(this.signal.reason);};
+      this.signal.addEventListener('abort',abort,{once:true});
+      this.answerMega=(response)=>{
+        if(response.id!==id)return;
+        this.signal.removeEventListener('abort',abort);this.answerMega=null;
+        resolve(response.value);
+      };
+      emit('mega_input',{url,id,...prompt});
+    });
+  }
   async browser(platform) {
     if(platform==='hanime' && this.hanimeContext && this.context!==this.hanimeContext) {
       await this.context?.close().catch(()=>{});
@@ -105,15 +120,32 @@ class Engine {
   async run(items) {
     const store = new StateStore(this.options.output, 'resource_download_state.json');
     let completed = 0, failed = 0;
-    for (let index = 0; index < items.length; index++) {
+    const localMode=['revival','local','megacmd'].includes(this.options.megaMode);
+    const cooldown=localMode && items.some(x=>x.platform==='mega')
+      ? new (require('./mega-cooldown').MegaCooldown)(this.options.state||this.options.output) : null;
+    let deferred=[];
+    const megaSessions=new Map();
+    for (let index = 0; index < items.length || deferred.length; index++) {
       this.signal.throwIfAborted();
+      if (index===items.length) {
+        log(cooldown.detail()+' 等待期间可点击停止。');
+        try {await cooldown.wait(this.signal);} catch(error){if(this.signal.aborted)break;throw error;}
+        items=deferred;deferred=[];index=0;
+      }
       const item = items[index], source = item.url;
-      const localMega=item.platform==='mega' && this.options.megaMode==='local';
+      const localMega=item.platform==='mega' && localMode;
+      if (localMega && cooldown.remaining()) {
+        deferred.push(item);
+        emit('task',{url:source,status:'待继续',detail:cooldown.detail()});
+        continue;
+      }
       emit('task', { url: source, status: '处理中', index: index + 1, total: items.length });
       try {
         if(localMega) {
           const {downloadMega}=require('./mega-local');
+          if(!megaSessions.has(source))megaSessions.set(source,{});
           const count=await withRetries(()=>downloadMega(source,this.options,{signal:this.signal,pacer:this.pacer,log,
+            session:megaSessions.get(source),interact:p=>this.askMega(source,p),
             onProgress:p=>emit('progress',{url:source,...p})}),{config:this.config,signal:this.signal,
               onRetry:(e,n,ms)=>emit('retry',{url:source,text:`${e.message} ${ms/1000} 秒后重试（${n}/${this.config.retryDelays.length}）`})});
           emit('task',{url:source,status:'完成',detail:`MEGA ${count} 个文件已下载到本地并通过完整解密校验`});completed++;
@@ -220,6 +252,16 @@ class Engine {
       } catch (raw) {
         const error = classify(raw);
         if(localMega) {
+          if(error.code==='MEGA_SKIP') {
+            emit('task',{url:source,status:'待继续',detail:error.message});
+            continue;
+          }
+          if (!this.signal.aborted && ['MEGA_QUOTA','MEGA_RATE'].includes(error.code)) {
+            cooldown.hit(error);
+            deferred.push(item);
+            emit('task',{url:source,status:'待继续',detail:cooldown.detail()});
+            continue;
+          }
           emit('task',{url:source,status:this.signal.aborted||error.pauseQueue?'待继续':'失败',detail:error.message});
           if(this.signal.aborted)break;
           failed++;
@@ -271,14 +313,20 @@ async function main() {
   const job = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
   const { chromium } = require(process.env.ES_RESOURCE_PLAYWRIGHT);
   const engine = new Engine(job.options, chromium);
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', text => { if (text.includes('STOP')) void engine.stop(); if (text.includes('FINISH_LOGIN')) engine.loginDone = true; });
-  process.stdin.resume();
+  const input=require('node:readline').createInterface({input:process.stdin,crlfDelay:Infinity});
+  input.on('line',line=>{
+    if(line==='STOP')void engine.stop();
+    else if(line==='FINISH_LOGIN')engine.loginDone=true;
+    else if(line.startsWith('{')) {
+      try {const reply=JSON.parse(line);if(reply.type==='mega_reply')engine.answerMega?.(reply);}catch {}
+    }
+  });
+  input.on('close',()=>{if(engine.answerMega)void engine.stop();});
   try {
     if (job.login) await engine.login(job.items[0]); else await engine.run(job.items);
   } catch (error) {
     if (!engine.signal.aborted) { emit('error', { text: error.message }); process.exitCode = 1; }
-  } finally { await engine.close(); process.stdin.pause(); }
+  } finally { await engine.close(); input.close(); process.stdin.pause(); }
 }
 if (require.main === module) main().catch(error => { emit('error', { text: error.message }); process.exitCode = 1; });
 module.exports = { Engine };

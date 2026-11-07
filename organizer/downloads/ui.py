@@ -17,7 +17,7 @@ from .model import Item, parse_items, save_queue, load_queue, PLATFORMS, KEYS, c
 import customtkinter as ctk
 
 QUALITY={'best':'最高画质 / 原始文件','2160':'不高于 2160p','1080':'不高于 1080p','720':'不高于 720p','480':'不高于 480p'}
-MEGA_MODES={'local':'下载到本地','cloud':'保存到 MEGA 网盘'}
+MEGA_MODES={'revival':'Revival 下载到本地','local':'内置下载到本地','megacmd':'MEGAcmd 下载到本地','cloud':'保存到 MEGA 网盘'}
 
 
 class DownloadPage:
@@ -39,7 +39,10 @@ class DownloadPage:
         self.request_interval = tk.StringVar(value=str(options.get('requestInterval', 8)))
         self.per_minute = tk.StringVar(value=str(options.get('perMinute', 6)))
         self.mega = tk.BooleanVar(value=False)
-        self.mega_mode=tk.StringVar(value=MEGA_MODES.get(options.get('megaMode'),MEGA_MODES['local']))
+        self.mega_pick=tk.BooleanVar(value=options.get('megaPick',True))
+        self.mega_prompt=None
+        self.mega_mode=tk.StringVar(value=MEGA_MODES.get(options.get('megaMode'),MEGA_MODES['revival']))
+        self.megacmd_path=tk.StringVar(value=options.get('megacmdPath',''))
         self.mega_connections=tk.StringVar(value=str(options.get('megaConnections',2)))
         self.quality=tk.StringVar(value=QUALITY.get(options.get('quality'),QUALITY['best']))
         self.rate_limit=tk.StringVar(value=str(options.get('rateLimitMiB',0)))
@@ -79,7 +82,7 @@ class DownloadPage:
         switch(left, 'Hanime 使用兼容 Chrome 方式', self.hanime_legacy)
         caption(left,'自定义 HTTP 代理 · 留空沿用原连接')
         self.proxy_control=entry(left,self.proxy);self.proxy_control.pack(fill='x')
-        hint(left,'例如 http://127.0.0.1:7890；对本模块网页、直链和 MEGA 本地下载统一生效。')
+        hint(left,'例如 http://127.0.0.1:7890。MEGAcmd 的文件传输使用官方客户端自己的代理设置。')
         caption(left, '任务间隔（秒）')
         entry(left, self.interval).pack(fill='x')
         caption(left, '页面 / 请求间隔（秒）')
@@ -93,15 +96,32 @@ class DownloadPage:
         text_box(left,self.session_note,72).pack(fill='x')
         hint(left, '各网站独立保存登录。临时断线自动重试；验证页面由你在浏览器中完成。')
         section(left,'03','本地下载设置')
-        caption(left,'直链与 MEGA 限速 · MiB/s，0 不限')
+        caption(left,'直链、Revival 与内置 MEGA 限速 · MiB/s，0 不限')
         self.rate_control=entry(left,self.rate_limit);self.rate_control.pack(fill='x')
         hint(left,'限速不控制浏览器接管的官网保存；请求间隔与每分钟上限继续单独生效。')
         caption(left,'MEGA 处理方式')
         self.mega_control=combo(left,self.mega_mode,list(MEGA_MODES.values()),width=250);self.mega_control.pack(fill='x')
-        caption(left,'MEGA 每个文件连接数 · 1–8')
-        self.connections_control=entry(left,self.mega_connections);self.connections_control.pack(fill='x')
-        switch(left, '允许保存到当前 MEGA 账号', self.mega)
-        hint(left, '公开分享下载到本地不需要账号；保留子目录、断点，完成后核对完整文件。网盘保存模式仍需开启上方授权；未确认成功的提交不重复保存。')
+        mode_panel=frame(left);mode_panel.pack(fill='x')
+        pick_control=switch(mode_panel,'下载前选择 MEGA 文件夹内容',self.mega_pick)
+        self.mega_panels={key:frame(mode_panel) for key in ('local','megacmd','cloud')}
+        local=self.mega_panels['local']
+        self.mega_panels['revival']=local
+        caption(local,'每个文件连接数 · 1–8')
+        self.connections_control=entry(local,self.mega_connections);self.connections_control.pack(fill='x')
+        official=self.mega_panels['megacmd']
+        self.cmd_entry,self.cmd_choose=path_field(official,'MEGAcmd 目录 · 留空自动查找',self.megacmd_path,self.choose_megacmd)
+        hint(official,'使用 MEGA 官方客户端传输，公开分享通常免登录。代理、限速和账号在 MEGAcmd 中设置。')
+        cloud=self.mega_panels['cloud']
+        switch(cloud, '允许保存到当前 MEGA 账号', self.mega)
+        hint(cloud,'请先登录 MEGA 网页。未确认成功的网盘提交保留供核对。')
+        def show_mode(*_):
+            for panel in set(self.mega_panels.values()):panel.pack_forget()
+            key=next((k for k,v in MEGA_MODES.items() if v==self.mega_mode.get()),'revival')
+            if key=='cloud':pick_control.pack_forget()
+            else:pick_control.pack(anchor='w',pady=5)
+            self.mega_panels[key].pack(fill='x')
+        self.mega_mode.trace_add('write',show_mode)
+        show_mode()
         self.start_button = button(self.layout.bottom, '开始 / 继续', self.start, accent=True)
         self.start_button.pack(fill='x')
         row = frame(self.layout.bottom); row.pack(fill='x', pady=7)
@@ -198,6 +218,10 @@ class DownloadPage:
         folder = filedialog.askdirectory(parent=self.window, title='保存资源')
         if folder: self.output.set(folder)
 
+    def choose_megacmd(self):
+        folder=filedialog.askdirectory(parent=self.window,title='选择含 MEGAclient.exe 的安装目录')
+        if folder:self.megacmd_path.set(folder)
+
     def options(self):
         interval = float(self.interval.get())
         if not 0 <= interval <= 86400: raise ValueError('任务间隔需要介于 0 和 86400 秒。')
@@ -207,7 +231,7 @@ class DownloadPage:
         per_minute = request_limit(self.per_minute.get())
         rate=float(self.rate_limit.get())
         if not math.isfinite(rate) or rate<0 or rate>1024 or 0<rate<.001:raise ValueError('限速请输入 0 或 0.001–1024 MiB/s。')
-        connections=int(self.mega_connections.get())
+        connections=int(self.mega_connections.get()) if self.mega_mode.get() in (MEGA_MODES['local'],MEGA_MODES['revival']) else 2
         if not 1<=connections<=8:raise ValueError('MEGA 每个文件连接数需要介于 1 和 8。')
         quality=next(k for k,v in QUALITY.items() if v==self.quality.get())
         mega_mode=next(k for k,v in MEGA_MODES.items() if v==self.mega_mode.get())
@@ -220,13 +244,13 @@ class DownloadPage:
         return dict(output=str(Path(self.output.get()).resolve()), state=str(self.state_dir), browser=self.browser.get(),
                     visible=self.visible.get(), interval=interval, requestInterval=request_interval,
                     perMinute=per_minute, megaSave=self.mega.get(), iwaraLegacy=self.iwara_legacy.get(), hanimeLegacy=self.hanime_legacy.get(),
-                    quality=quality,megaMode=mega_mode,megaConnections=connections,rateLimit=int(rate*1048576),proxy=proxy)
+                    quality=quality,megaMode=mega_mode,megaPick=self.mega_pick.get(),megacmdPath=self.megacmd_path.get().strip(),megaConnections=connections,rateLimit=int(rate*1048576),proxy=proxy)
 
     def start(self, failed_only=False, selected_only=False):
         if self.busy: return
         if self.links.get('1.0', 'end').strip(): self.add_input()
         selection=set(self.tree.selection())
-        local_mega=self.mega_mode.get()==MEGA_MODES['local']
+        local_mega=self.mega_mode.get()!=MEGA_MODES['cloud']
         items=[x for x in self.items if (not selected_only or x.key in selection) and (not failed_only or x.status=='失败')]
         items=[x for x in items if (local_mega and x.platform=='MEGA') or x.status not in ('网盘已保存','重复已跳过','需核对')]
         if not selected_only:items=[x for x in items if x.status not in ('完成','已校验跳过')]
@@ -267,6 +291,7 @@ class DownloadPage:
 
     def stop(self):
         self.cancel.set()
+        self.dismiss_mega_prompt()
         if self.service: self.service.stop()
         self.status.set('正在停止；已下载断点会保留。')
 
@@ -274,9 +299,25 @@ class DownloadPage:
         if self.service: self.service.send('FINISH_LOGIN')
         self.login_done.configure(state='disabled')
 
+    def dismiss_mega_prompt(self):
+        if self.mega_prompt:
+            self.mega_prompt.destroy()
+            self.mega_prompt=None
+
+    def prompt_mega(self,event):
+        if self.cancel.is_set() or not self.service:return
+        from .mega_picker import MegaPrompt
+        self.dismiss_mega_prompt()
+        def reply(value):
+            self.mega_prompt=None
+            self.service.send(json.dumps(dict(type='mega_reply',id=event['id'],value=value),ensure_ascii=True))
+        item=self.by_url.get(event['url'])
+        self.status.set('等待选择 MEGA 文件。' if event['kind']=='files' else '等待输入此 MEGA 分享的密码或密钥。')
+        self.mega_prompt=MegaPrompt(self.tree,event,item.title if item else '',reply)
+
     def controls(self, busy):
         for widget in (self.start_button, self.retry_button, self.login_button, self.remove_button, self.clear_button, self.clear_all_button,
-                       self.selected_button,self.quality_control,self.rate_control,self.mega_control,self.connections_control,self.proxy_control):
+                       self.selected_button,self.quality_control,self.rate_control,self.mega_control,self.connections_control,self.proxy_control,self.cmd_entry,self.cmd_choose):
             widget.configure(state='disabled' if busy else 'normal')
         self.stop_button.configure(state='normal' if busy else 'disabled')
         self.layout.progress.configure(mode='indeterminate')
@@ -298,6 +339,7 @@ class DownloadPage:
             if kind in ('log', 'retry', 'error', 'login'):
                 self.append_log(text); self.status.set(text)
                 if kind == 'login': self.login_done.configure(state='normal', text='已完成，继续' if event.get('action') == 'resume' else '保存登录')
+            elif kind=='mega_input':self.prompt_mega(event)
             elif kind=='session':
                 key=event.get('platform')
                 if key in KEYS.values():
@@ -321,6 +363,7 @@ class DownloadPage:
                 self.status.set((f"队列已暂停：{event.get('reason', '')}" if event.get('paused') else
                                 f"{'已停止' if event.get('stopped') else '本轮完成'} · 成功 {event['completed']} · 失败 {event['failed']}"))
             elif kind == 'finished':
+                self.dismiss_mega_prompt()
                 progress = None
                 self.busy = False; self.controls(False)
                 for item in self.items:
@@ -424,7 +467,9 @@ class DownloadPage:
         options = {key: getattr(self, key).get() for key in ('output', 'browser', 'visible', 'interval')}
         options.update(requestInterval=self.request_interval.get(), perMinute=self.per_minute.get(), iwaraLegacy=self.iwara_legacy.get(), hanimeLegacy=self.hanime_legacy.get())
         options.update(quality=next((k for k,v in QUALITY.items() if v==self.quality.get()),'best'),
+                       megaPick=self.mega_pick.get(),
                        megaMode=next((k for k,v in MEGA_MODES.items() if v==self.mega_mode.get()),'local'),
+                       megacmdPath=self.megacmd_path.get().strip(),
                        megaConnections=self.mega_connections.get(),rateLimitMiB=self.rate_limit.get(),proxy=self.proxy.get(),sessions=self.sessions)
         return options
 

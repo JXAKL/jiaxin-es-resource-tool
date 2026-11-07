@@ -1,5 +1,7 @@
 """Build a ready-to-run Windows folder. Archiving is left to the user."""
 import importlib.metadata
+import hashlib
+import os
 import json
 import platform
 import shutil
@@ -65,6 +67,13 @@ def main():
     assert sys.platform == 'win32' and platform.machine().upper() in ('AMD64', 'X86_64'), 'Build on Windows x64'
     assert list(BROWSERS.glob('chromium-*/chrome-win64/chrome.exe')), 'Install Chromium into .build-assets/browsers first'
     assert PLAYER.is_file(), 'Prepare .build-assets/media/mpv.exe first'
+    revival = ROOT / 'organizer/downloads/js/vendor/revival'
+    upstream = revival / 'MegaDownloader.exe'
+    assert hashlib.sha256(upstream.read_bytes()).hexdigest() == '6afc3dfd23766f9b3227549111af524e2e2485d5c11e416bb31bb1b297eaeb50', 'Expected original Revival v2.6.2 single-file release'
+    compiler = Path(os.environ['SystemRoot']) / 'Microsoft.NET/Framework/v4.0.30319/csc.exe'
+    subprocess.run([str(compiler), '/nologo','/platform:x86','/optimize+',f'/out:{revival / "RevivalWorker.exe"}',
+                    f'/reference:{upstream}','/reference:System.Web.Extensions.dll','/reference:System.Windows.Forms.dll',
+                    str(ROOT / 'organizer/downloads/revival/RevivalWorker.cs')],check=True)
     # Browser cache metadata contains developer-machine paths and is not shipped.
     browser_data = []
     for folder in browser_folders():
@@ -109,6 +118,9 @@ def main():
     vendor=ROOT/'organizer/downloads/js/vendor'
     shutil.copy2(vendor/'THIRD_PARTY_LICENSES.txt',licenses/'Download-Libraries.txt')
     versions['download_libraries']=json.loads((vendor/'versions.json').read_text(encoding='utf-8'))
+    versions['MegaDownloader-Revival']='2.6.2'
+    for name in ('LICENSE','NOTICE'):
+        shutil.copy2(revival / name, licenses / ('MegaDownloader-Revival-'+name+'.txt'))
     removed = trim_runtime(DEST)
     manifest = {'version': VERSION, 'platform': 'Windows 10/11 x64', 'python': platform.python_version(),
                 'dependencies': versions, 'browser_folders': [p.name for p in browser_folders()],
